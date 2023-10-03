@@ -1,6 +1,6 @@
 {
     "cwd": ".",
-    "extension": ["js"],
+    "extension": [".js"],
     "include": ["**"],
     "exclude": ["coverage/**", "node_modules/**", "test/**" ],
     "reporter": ["text", "html"],
