@@ -1,39 +1,99 @@
 const path = require('path');
+const fs = require('fs');
 const Mocha = require('mocha');
 const glob = require('glob');
 const { createInstrumenter } = require('istanbul-lib-instrument');
-const instrumenter = createInstrumenter();
+const coverageVar = '$$cov_' + new Date().getTime() + '$$';
+const instrumenter = createInstrumenter({
+	coverageVariable: coverageVar
+  })
 const { hookRequire } = require('istanbul-lib-hook');
-const TestExclude = require('test-exclude')
 var libCoverage = require('istanbul-lib-coverage');
 
-function setupCoverage(testsRoot) {
-	const projectRoot = path.resolve(path.join(testsRoot, ".."))
+function setupCoverage(projectRoot) {
 	console.log("project: ", projectRoot)
-	const matcher = new TestExclude({ cwd: projectRoot,  exclude: [".vscode/extensions/**", "node_modules/**", "test/**", "coverage/**"], extension: ['.js'] })
+	const config = readConfig(projectRoot)
+	console.log("config: ", config)
+	const TestExclude = require('test-exclude')
+	const matchOption = Object.keys(config).filter(k => ['cwd', 'extension', 'include', 'exclude']).reduce((obj, k) => {
+		obj[k] = config[k]
+		return obj
+	}, {})
+	console.log("matchOption: ", matchOption)
+
+	const matcher = new TestExclude({ ...matchOption })
 	hookRequire((filePath) => {
 		const r = matcher.shouldInstrument(filePath)
-		// console.log(filePath, r)
+		if (r) {
+			console.log(filePath, r)
+		}
 		return r
 	}, (code, { filename }) => instrumenter.instrumentSync(code, filename));
+	global[coverageVar] = {}
+
+	process.on('exit', () => {
+		reportCoverage(projectRoot, config)
+	})
 }
 
-function reportCoverage(testsRoot) {
-  const projectRoot = path.resolve(path.join(testsRoot, ".."))
-  console.log("dir:", projectRoot)
-  var coverageMap = libCoverage.createCoverageMap(global.__coverage__);
+function readConfig(projectRoot) {
+	const configPath = path.join(projectRoot, "coverage.config.json")
+	if (fs.existsSync(configPath)) {
+		const config =  JSON.parse(fs.readFileSync(configPath, 'utf-8'))
+		if (config["cwd"]) {
+			if (!path.isAbsolute(config["cwd"])) {
+				const absPath = path.resolve(projectRoot, config["cwd"])
+				console.log(`convert config.cwd: ${config["cwd"]} => ${absPath}`)
+				config["cwd"] = absPath
+			}
+		} else {
+			config["cwd"] = projectRoot
+		}
+		return config
+	}
+	return {}
+}
+
+function reportCoverage(projectRoot, config = {}) {
+
+  var coverageMap = libCoverage.createCoverageMap(global[coverageVar]);
 
   const libReport = require("istanbul-lib-report");
   const reports = require("istanbul-reports");
 
-    // create a context for report generation
-  const context = libReport.createContext({ dir: path.join(projectRoot, "coverage"), coverageMap });
+  const options = {}
+  if (config["watermarks"]) {
+	options["watermarks"] = config["watermarks"];
+  }
+  if (config["report-dir"]) {
+    if (path.isAbsolute(config["report-dir"])) {
+      options["dir"] = config["report-dir"];
+    } else {
+      options["dir"] = path.resolve(config["cwd"], config["report-dir"]);
+    }
+  }
+  console.log("reportOptions: ", options);
 
-    // create an instance of the relevant report class, passing the
-  // report name e.g. json/html/html-spa/text
-  const report = reports.create("html");
-// call execute to synchronously create and write the report to disk
-  report.execute(context);
+  // create a context for report generation
+  const context = libReport.createContext({
+    ...options,
+    coverageMap,
+  });
+
+  const reporters = []
+  console.log("config[reporter]: ", config["reporter"])
+  if (config["reporter"]) {
+	reporters.push(...config["reporter"])
+  } else {
+	reporters.push("text-summary")
+  }
+
+  for(const name of reporters) {
+	const summary = reports.create(name);
+  	summary.execute(context);
+	console.log()
+  }
+
 }
 
 function run() {
@@ -44,7 +104,8 @@ function run() {
 	});
 
 	const testsRoot = path.resolve(__dirname, '..');
-	setupCoverage(testsRoot)
+	const projectRoot = path.resolve(path.join(testsRoot, ".."))
+	setupCoverage(projectRoot)
 
 	return new Promise((c, e) => {
 		const testFiles = new glob.Glob('**/**.test.js', { cwd: testsRoot });
@@ -68,7 +129,6 @@ function run() {
 					}
 				});
 				console.log("END!!")
-				reportCoverage(testsRoot)
 			} catch (err) {
 				console.error(err);
 				e(err);

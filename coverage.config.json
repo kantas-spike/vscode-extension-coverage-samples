@@ -1,0 +1,8 @@
+{
+    "cwd": ".",
+    "extension": ["js"],
+    "include": ["**"],
+    "exclude": ["coverage/**", "node_modules/**", "test/**" ],
+    "reporter": ["text", "html"],
+    "report-dir": "./coverage"
+}
