@@ -11,21 +11,23 @@ const { hookRequire } = require('istanbul-lib-hook');
 var libCoverage = require('istanbul-lib-coverage');
 
 function setupCoverage(projectRoot) {
-	console.log("project: ", projectRoot)
+	console.log("projectRoot: ", projectRoot)
 	const config = readConfig(projectRoot)
-	console.log("config: ", config)
+	// console.log("config: ", config)
 	const TestExclude = require('test-exclude')
 	const matchOption = Object.keys(config).filter(k => ['cwd', 'extension', 'include', 'exclude']).reduce((obj, k) => {
 		obj[k] = config[k]
 		return obj
 	}, {})
-	console.log("matchOption: ", matchOption)
+	// console.log("matchOption: ", matchOption)
 
 	const matcher = new TestExclude({ ...matchOption })
+	console.log("\nmatcher:\n    ", JSON.stringify(matcher))
+	console.log("\nmatched: ")
 	hookRequire((filePath) => {
 		const r = matcher.shouldInstrument(filePath)
 		if (r) {
-			console.log(filePath, r)
+			console.log("   ", filePath)
 		}
 		return r
 	}, (code, { filename }) => instrumenter.instrumentSync(code, filename));
@@ -37,18 +39,20 @@ function setupCoverage(projectRoot) {
 }
 
 function readConfig(projectRoot) {
+	console.log("readConfig: ")
 	const configPath = path.join(projectRoot, "coverage.config.json")
 	if (fs.existsSync(configPath)) {
 		const config =  JSON.parse(fs.readFileSync(configPath, 'utf-8'))
 		if (config["cwd"]) {
 			if (!path.isAbsolute(config["cwd"])) {
 				const absPath = path.resolve(projectRoot, config["cwd"])
-				console.log(`convert config.cwd: ${config["cwd"]} => ${absPath}`)
+				console.log(`    convert config.cwd: ${config["cwd"]} => ${absPath}`)
 				config["cwd"] = absPath
 			}
 		} else {
 			config["cwd"] = projectRoot
 		}
+		console.log("    config: ", JSON.stringify(config))
 		return config
 	}
 	return {}
@@ -128,7 +132,6 @@ function run() {
 						c();
 					}
 				});
-				console.log("END!!")
 			} catch (err) {
 				console.error(err);
 				e(err);
