@@ -1,7 +1,7 @@
 const path = require("path");
 const Mocha = require("mocha");
 const glob = require("glob");
-const covUtils = require("../../lib/cov-utils");
+const covUtils = require("test-electron-coverage");
 
 function run() {
   // Create the mocha test
