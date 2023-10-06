@@ -2,7 +2,7 @@
     "cwd": ".",
     "extension": [".js"],
     "include": ["**"],
-    "exclude": ["coverage/**", "node_modules/**", "test/**" ],
+    "exclude": ["coverage/**", "node_modules/**", "test*/**", ".vscode-test/**" ],
     "reporter": ["text", "html"],
     "report-dir": "./coverage"
 }
