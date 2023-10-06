@@ -13,7 +13,7 @@ function run() {
   const testsRoot = path.resolve(__dirname, "..");
   const projectRoot = path.resolve(path.join(testsRoot, ".."));
   const config = covUtils.readConfig(projectRoot);
-  covUtils.setupCoverage(projectRoot, "test2", config);
+  covUtils.setupCoverage("test2", config);
 
   return new Promise((c, e) => {
     const testFiles = new glob.Glob("**/**.test.js", { cwd: testsRoot });

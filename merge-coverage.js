@@ -3,4 +3,4 @@ const covUtils = require("./lib/cov-utils")
 
 const projectRoot = path.resolve(".")
 const config = covUtils.readConfig(projectRoot)
-covUtils.mergeCoverageFromRaw(projectRoot, config)
+covUtils.mergeCoverageFromRaw("merged", config)
