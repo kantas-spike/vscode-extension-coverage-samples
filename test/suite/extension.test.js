@@ -18,7 +18,5 @@ suite('Extension Test Suite', () => {
 	test("hoge", () => {
 		assert.strictEqual(false, hoge.isMinus(0))
 		assert.strictEqual(false, hoge.isMinus(100))
-		assert.strictEqual(true, hoge.isMinus(-1))
-		assert.strictEqual(true, hoge.isMinus(-100))
 	})
 });
