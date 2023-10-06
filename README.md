@@ -401,14 +401,60 @@ All files     |      50 |       50 |      25 |      50 |
 --------------|---------|----------|---------|---------|-------------------
 ~~~
 
+### カバレッジデータのマージについて
+
 また、プロジェクトフォルダー直下の`coverage/raw/{カバレッジ名}.json`に、カバレッジデータをJSON形式に変換したデータ(rawデータ)が保存されています。
 
 `istanbul`を使ったカバレッジ計測は、テストランナーのプロセス単位に作成されるため、
 単体テストやE2Eテストが複数のテストランナーに別れる場合は、カバレッジデータをマージしてから、カバレッジレポートを出力する必要があります。
 
-rawデータをマージして、レポートを出力するためのツールとして、[merge-coverage.js](merge-coverage.js)を用意しました。
+例えば、以下の2つにテストランナーが分かれている場合、
 
-以下のように実行すると、rawデータをマージしたレポートが`coverage/{merged}/index.html`に作成されます。
+- [test/runTest.js](test/runTest.js)
+- [test2/runTest.js](test2/runTest.js)
+
+以下のコマンドでカバレッジレポートを出力できますが、`カバレッジ名`を同じ名前にすると、レポートやrawデータが上書きされてしまいます。
+
+~~~shell
+ node ./test/runTest.js
+~~~
+
+~~~shell
+ node ./test2/runTest.js
+~~~
+
+そこで、一方の`カバレッジ名`を別の名前に変更してからコマンドを実行する必要があります。
+
+~~~js
+// test2/suite/index.js
+const path = require("path");
+const Mocha = require("mocha");
+const glob = require("glob");
+const covUtils = require("../../lib/cov-utils");
+
+function run() {
+  // ...略...
+  const testsRoot = path.resolve(__dirname, "..");
+  const projectRoot = path.resolve(path.join(testsRoot, ".."));
+  const config = covUtils.readConfig(projectRoot);
+  covUtils.setupCoverage("test2", config); // <=カバレッジ名を重複しない名前に変更
+
+  return new Promise((c, e) => {
+    // ...略...
+  });
+}
+
+module.exports = {
+  run,
+};
+~~~
+
+上記の対応により、rawデータを別々に出力できるようになりました。
+
+テストランナーごとに分割されたカバレッジデータをマージするため、
+[merge-coverage.js](merge-coverage.js)を用意しました。
+
+以下のように実行すると、rawデータをマージしたレポートが`coverage/merged/index.html`に作成されます。
 
 ~~~js
 % node ./merge-coverage.js
