@@ -58,238 +58,13 @@ vscode拡張機能のテストは、新しくvscodeのプロセスが作成さ�
 
 そのため、[test/suite/index.js](test/suite/index.js)内に、カバレッジ機能を実装しましょう。
 
-まずは、`Istanbul`関連パッケージをインストールします。
+まずは、`Istanbul`を利用したVisual Studio Code拡張機能のテストカバレッジ用ライブラリ `kantas-spike/test-electron-coverage` をインストールします。
 
 ~~~shell
-npm install -D istanbul-lib-coverage istanbul-lib-hook istanbul-lib-instrument istanbul-lib-report istanbul-reports test-exclude
+npm install -D kantas-spike/test-electron-coverage
 ~~~
 
-次に、カバレッジ用の関数を[lib/cov-utils.js](lib/cov-utils.js)に作成しました。
-
-~~~js
-const path = require("path");
-const fs = require("fs");
-const glob = require("glob");
-
-const { createInstrumenter } = require("istanbul-lib-instrument");
-const coverageVar = "$$cov_" + new Date().getTime() + "$$";
-const instrumenter = createInstrumenter({
-  coverageVariable: coverageVar,
-});
-const { hookRequire } = require("istanbul-lib-hook");
-const libCoverage = require("istanbul-lib-coverage");
-
-/**
- * カバレッジ計測のデフォルトオプション
- *
- * キー(文字列)と値(boolean)を持つ。
- *    `saveReport`: カバレッジレポート保存の有無(デフォルト値: true)、 `saveRawData`: カバレッジデータ保存の有無(デフォルト値: true)
- */
-const defaultSetupOption = {
-  saveReport: true,
-  saveRawData: true,
-};
-
-/**
- * `istanbul-lib-*`を使ったカバレッジ計測をセットアップする
- *
- * @param {string} coverageName - カバレッジ名。カバレッジレポートやrawデータの保存先のフォルダー名になる
- * @param {*} config - 設定ファイルの設定データ
- * @param {*} options - セットアップオプション。
- * `saveReport`: カバレッジレポート保存の有無、`saveRawData`: カバレッジデータ保存の有無。
- * いずれも未指定時はカバレッジ計測のデフォルトオプションが採用される。
- */
-function setupCoverage(coverageName, config, options = {}) {
-  // console.log("options: ", options)
-  options = Object.assign({}, defaultSetupOption, options);
-  // console.log("config: ", config)
-  const TestExclude = require("test-exclude");
-  const matchOption = Object.keys(config)
-    .filter((k) => ["cwd", "extension", "include", "exclude"])
-    .reduce((obj, k) => {
-      obj[k] = config[k];
-      return obj;
-    }, {});
-  // console.log("matchOption: ", matchOption)
-
-  const matcher = new TestExclude({ ...matchOption });
-  console.log("\nmatcher:\n    ", JSON.stringify(matcher));
-  console.log("\nmatched: ");
-  hookRequire(
-    (filePath) => {
-      const r = matcher.shouldInstrument(filePath);
-      if (r) {
-        console.log("   ", filePath);
-      }
-      return r;
-    },
-    (code, { filename }) => instrumenter.instrumentSync(code, filename)
-  );
-  global[coverageVar] = {};
-
-  process.on("exit", () => {
-    console.log("on exit!!");
-    var coverageMap = libCoverage.createCoverageMap(global[coverageVar]);
-
-    if (options["saveRawData"]) {
-      saveRawCoverage(coverageMap, coverageName, config);
-    }
-
-    if (options["saveReport"]) {
-      reportCoverage(coverageMap, coverageName, config);
-    }
-  });
-}
-
-/**
- * 設定ファイルを読み込む。
- *
- * 設定項目`cwd`の値が相対パスの場合、`projectRoot`を基準にした絶対パスに変換される。
- *
- * @param {*} projectRoot - プロジェクトのルートフォルダーのパス
- * @param {*} configFileName - 設定ファイル名
- * @returns {Object} 設定ファイルの内容
- */
-function readConfig(projectRoot, configFileName = "coverage.config.json") {
-  console.log("projectRoot: ", projectRoot);
-  console.log("readConfig: ");
-  const configPath = path.join(projectRoot, configFileName);
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    if (config["cwd"]) {
-      if (!path.isAbsolute(config["cwd"])) {
-        const absPath = path.resolve(projectRoot, config["cwd"]);
-        console.log(`    convert config.cwd: ${config["cwd"]} => ${absPath}`);
-        config["cwd"] = absPath;
-      }
-    } else {
-      config["cwd"] = projectRoot;
-    }
-    console.log("    config: ", JSON.stringify(config));
-    return config;
-  }
-  return {};
-}
-
-/**
- * JSON形式のカバレッジデータの保存先フォルダー名
- */
-const RAW_DIR_NAME = "raw";
-
-/**
- * JSON形式のカバレッジrawデータを保存する。
- *
- * @param {libCoverage.CoverageMap} coverageMap - カバレッジマップ
- * @param {String} coverageName - カバレッジ名。カバレッジレポートやrawデータの保存先のフォルダー名になる
- * @param {Object} config - 設定ファイルの設定データ
- */
-function saveRawCoverage(coverageMap, coverageName, config = {}) {
-  console.log(coverageMap);
-
-  const outputDir = path.join(getReportDir(config), RAW_DIR_NAME);
-
-  console.log("raw dir: ", outputDir);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-
-  let rawJsonPath;
-  if (coverageName) {
-    rawJsonPath = path.join(outputDir, `${coverageName}.json`);
-  } else {
-    rawJsonPath = path.join(outputDir, `pid_${process.pid}.json`);
-  }
-  console.log("raw json path: ", rawJsonPath);
-  fs.writeFileSync(rawJsonPath, JSON.stringify(coverageMap));
-}
-
-/**
- * rawデータフォルダーにある全JSONファイルを取得し、カバレッジマップにマージし、レポートを作成する
- *
- * @param {String} coverageName - カバレッジ名。カバレッジレポートやrawデータの保存先のフォルダー名になる
- * @param {Object} config - 設定ファイルの設定データ
- */
-function mergeCoverageFromRaw(coverageName, config = {}) {
-  var coverageMap = libCoverage.createCoverageMap({});
-  const rawDir = path.join(getReportDir(config), RAW_DIR_NAME);
-  for (const json of glob.globSync(path.join(rawDir, "*.json"))) {
-    console.log("merage raw json: ", json);
-    const map = fs.readFileSync(json, "utf-8");
-    coverageMap.merge(JSON.parse(map));
-  }
-  reportCoverage(coverageMap, coverageName, config);
-}
-
-/**
- * レポート保存先フォルダー名
- */
-const REPORT_DIR_NAME = "coverage";
-
-/**
- * カバレッジレポートの出力先フォルダーを取得する
- *
- * @param {Object} config - 設定ファイルの設定データ
- * @returns {String} 出力フォルダーのパス
- */
-function getReportDir(config) {
-  if (config["report-dir"]) {
-    if (path.isAbsolute(config["report-dir"])) {
-      return config["report-dir"];
-    } else {
-      return path.resolve(config["cwd"], config["report-dir"]);
-    }
-  } else {
-    return path.join(config["cwd"], REPORT_DIR_NAME);
-  }
-}
-
-/**
- * カバレッジレポートを出力する
- *
- * @param {libCoverage.CoverageMap} coverageMap - カバレッジマップ
- * @param {String} coverageName - カバレッジ名。カバレッジレポートやrawデータの保存先のフォルダー名になる
- * @param {Object} config - 設定ファイルの設定データ
- */
-function reportCoverage(coverageMap, coverageName, config = {}) {
-  const libReport = require("istanbul-lib-report");
-  const reports = require("istanbul-reports");
-
-  const options = {};
-  if (config["watermarks"]) {
-    options["watermarks"] = config["watermarks"];
-  }
-  options["dir"] = path.join(getReportDir(config), coverageName);
-  console.log("reportOptions: ", options);
-
-  // create a context for report generation
-  const context = libReport.createContext({
-    ...options,
-    coverageMap,
-  });
-
-  const reporters = [];
-  console.log("config[reporter]: ", config["reporter"]);
-  if (config["reporter"]) {
-    reporters.push(...config["reporter"]);
-  } else {
-    reporters.push("text-summary");
-  }
-
-  for (const name of reporters) {
-    const summary = reports.create(name);
-    summary.execute(context);
-    console.log();
-  }
-}
-
-module.exports = {
-  readConfig,
-  setupCoverage,
-  mergeCoverageFromRaw,
-};
-~~~
-
-### 設定ファイル
+次にカバレッジ用設定ファイルを用意します。
 
 プロジェクトフォルダー直下に、[coverage.config.json](./coverage.config.json)を置くことで、
 カバレッジ対象のjsファイル、カバレッジレポートの種類や出力先を設定できます。
@@ -306,15 +81,13 @@ module.exports = {
 }
 ~~~
 
-## 使い方
-
-[test/suite/index.js](test/suite/index.js)内でカバレッジを利用するためには、以下のようにします。
+そして、[test/suite/index.js](test/suite/index.js)内でカバレッジを利用するためには、以下のようにします。
 
 ~~~js
 const path = require("path");
 const Mocha = require("mocha");
 const glob = require("glob");
-const covUtils = require("../../lib/cov-utils");
+const covUtils = require("test-electron-coverage"); // Visual Studio Code拡張機能のテストカバレッジ用ライブラリ
 
 function run() {
   // Create the mocha test
@@ -325,8 +98,8 @@ function run() {
 
   const testsRoot = path.resolve(__dirname, "..");
   const projectRoot = path.resolve(path.join(testsRoot, ".."));
-  const config = covUtils.readConfig(projectRoot);
-  covUtils.setupCoverage("test", config);
+  const config = covUtils.readConfig(projectRoot); // 設定ファイルを読み込み
+  covUtils.setupCoverage("test", config);          // カバレッジのセットアップ
 
   return new Promise((c, e) => {
     const testFiles = new glob.Glob("**/**.test.js", { cwd: testsRoot });
@@ -430,7 +203,7 @@ All files     |      50 |       50 |      25 |      50 |
 const path = require("path");
 const Mocha = require("mocha");
 const glob = require("glob");
-const covUtils = require("../../lib/cov-utils");
+const covUtils = require("test-electron-coverage"); // Visual Studio Code拡張機能のテストカバレッジ用ライブラリ
 
 function run() {
   // ...略...
@@ -452,12 +225,12 @@ module.exports = {
 上記の対応により、rawデータを別々に出力できるようになりました。
 
 テストランナーごとに分割されたカバレッジデータをマージするため、
-[merge-coverage.js](merge-coverage.js)を用意しました。
+`merge-coverage`コマンドを用意しました。
 
 以下のように実行すると、rawデータをマージしたレポートが`coverage/merged/index.html`に作成されます。
 
 ~~~js
-% node ./merge-coverage.js
+% npx merge-coverage
 projectRoot:  /Users/kanta/hacking/spike/004_vscodeExtensionTest_with_coverage
 readConfig:
     convert config.cwd: . => /Users/kanta/hacking/spike/004_vscodeExtensionTest_with_coverage
@@ -487,5 +260,8 @@ All files     |      60 |      100 |      25 |      60 |
   - [Question about the docs / programmatic API · Issue #71 · istanbuljs/istanbuljs](https://github.com/istanbuljs/istanbuljs/issues/71#issuecomment-455172730)
   - [istanbuljs example of programmatic instrumentation, and coverage report.](https://gist.github.com/cancerberoSgx/c4ea6edd2862af0fc229598d8531fddb)
   - [istanbuljs/packages/istanbul-lib-report at master · istanbuljs/istanbuljs](https://github.com/istanbuljs/istanbuljs/tree/master/packages/istanbul-lib-report)
+
+- [kantas-spike/test-electron-coverage: Visual Studio Code拡張機能のテストカバレッジ用ライブラリです。](https://github.com/kantas-spike/test-electron-coverage)
+
 
 [^1]: 拡張機能のテストは`node ./test/runTest.js`により実行されます。`runTests`関数がテスト用のvscodeプロセスを起動し、`./test/suite/index.js`を実行します。
