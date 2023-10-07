@@ -29,11 +29,11 @@
     "@types/node": "18.x",
     "@types/vscode": "^1.82.0",
     "@vscode/test-electron": "^2.3.4",
+    "c8": "^8.0.1",
     "decache": "^4.6.2",
     "eslint": "^8.50.0",
     "glob": "^10.3.10",
     "mocha": "^10.2.0",
-    "test-electron-coverage": "github:kantas-spike/test-electron-coverage",
     "typescript": "^5.2.2"
   }
 }
