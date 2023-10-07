@@ -1,7 +1,6 @@
 const path = require("path");
 const Mocha = require("mocha");
 const glob = require("glob");
-const covUtils = require("test-electron-coverage");
 
 function run() {
   // Create the mocha test
@@ -11,9 +10,6 @@ function run() {
   });
 
   const testsRoot = path.resolve(__dirname, "..");
-  const projectRoot = path.resolve(path.join(testsRoot, ".."));
-  const config = covUtils.readConfig(projectRoot);
-  covUtils.setupCoverage("test2", config);
 
   return new Promise((c, e) => {
     const testFiles = new glob.Glob("**/**.test.js", { cwd: testsRoot });
